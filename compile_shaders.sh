@@ -1,4 +1,6 @@
 glslc shader/full_screen_triangle.vert -o shader/full_screen_triangle_vert.spv
+glslc shader/svo_main.vert -o shader/svo_main_vert.spv
+glslc shader/svo_main.frag -o shader/svo_main_frag.spv
 
 glslc shader/main.vert -o shader/main_vert.spv
 glslc shader/main.frag -o shader/main_frag.spv
