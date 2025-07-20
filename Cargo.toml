@@ -14,3 +14,11 @@ image = "0.23"
 rand = "0.7.3"
 miniz_oxide = "0.4.3"
 gpu-allocator = "0.17.0"
+
+[[bin]]
+name = "sdf2tilemap"
+path = "src/bin/sdf2tilemap/main.rs"
+
+[[bin]]
+name = "svosdf"
+path = "src/bin/svosdf/main.rs"

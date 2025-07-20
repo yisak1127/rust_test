@@ -1,0 +1,1 @@
+cargo run --release --bin svosdf data\ganymede-and-jupiter.sdf data\ganymede-and-jupiter.svosdf -b 8 -d 8 -t 0.01
