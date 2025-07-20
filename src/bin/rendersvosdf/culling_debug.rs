@@ -81,19 +81,23 @@ impl CullingDebug {
                 ..Default::default()
             },
         ];
-        let descriptor_info =
-            vk::DescriptorSetLayoutCreateInfo::builder().bindings(&desc_layout_bindings);
-
+            let descriptor_info = vk::DescriptorSetLayoutCreateInfo {
+            binding_count: desc_layout_bindings.len() as u32,
+            p_bindings: desc_layout_bindings.as_ptr(),
+            ..Default::default()
+        };
         let desc_set_layout =
             unsafe { device.create_descriptor_set_layout(&descriptor_info, None) }.unwrap();
 
         let desc_set_layouts = &[desc_set_layout];
 
-        let descriptor_sets = {
-            let desc_alloc_info = vk::DescriptorSetAllocateInfo::builder()
-                .descriptor_pool(*descriptor_pool)
-                .set_layouts(desc_set_layouts);
-
+          let descriptor_sets = {
+            let desc_alloc_info = vk::DescriptorSetAllocateInfo {
+                descriptor_pool: *descriptor_pool,
+                descriptor_set_count: desc_set_layouts.len() as u32,
+                p_set_layouts: desc_set_layouts.as_ptr(),
+                ..Default::default()
+            };
             unsafe { device.allocate_descriptor_sets(&desc_alloc_info) }.unwrap()
         };
 
@@ -123,9 +127,11 @@ impl CullingDebug {
         ];
         unsafe { device.update_descriptor_sets(&write_desc_sets, &[]) };
 
-        let layout_create_info =
-            vk::PipelineLayoutCreateInfo::builder().set_layouts(desc_set_layouts);
-
+          let layout_create_info = vk::PipelineLayoutCreateInfo {
+            set_layout_count: desc_set_layouts.len() as u32,
+            p_set_layouts: desc_set_layouts.as_ptr(),
+            ..Default::default()
+        };
         let pipeline_layout =
             unsafe { device.create_pipeline_layout(&layout_create_info, None) }.unwrap();
 
@@ -136,11 +142,19 @@ impl CullingDebug {
 
         let vertex_code =
             read_spv(&mut vertex_spv_file).expect("Failed to read vertex shader spv file");
-        let vertex_shader_info = vk::ShaderModuleCreateInfo::builder().code(&vertex_code);
+        let vertex_shader_info = vk::ShaderModuleCreateInfo{
+            code_size: vertex_code.len() * 4,
+            p_code: vertex_code.as_ptr(),
+            ..Default::default()
+        };
 
         let frag_code =
             read_spv(&mut frag_spv_file).expect("Failed to read fragment shader spv file");
-        let frag_shader_info = vk::ShaderModuleCreateInfo::builder().code(&frag_code);
+        let frag_shader_info = vk::ShaderModuleCreateInfo{
+            code_size: frag_code.len() * 4,
+            p_code: frag_code.as_ptr(),
+            ..Default::default()
+        };
 
         let vertex_shader_module =
             unsafe { device.create_shader_module(&vertex_shader_info, None) }
@@ -175,9 +189,13 @@ impl CullingDebug {
 
         let scissors = &[view_scissor.scissor];
         let viewports = &[view_scissor.viewport];
-        let viewport_state_info = vk::PipelineViewportStateCreateInfo::builder()
-            .scissors(scissors)
-            .viewports(viewports);
+   let viewport_state_info = vk::PipelineViewportStateCreateInfo {
+            viewport_count: viewports.len() as u32,
+            p_viewports: viewports.as_ptr(),
+            scissor_count: scissors.len() as u32,
+            p_scissors: scissors.as_ptr(),
+            ..Default::default()
+        };
 
         let rasterization_info = vk::PipelineRasterizationStateCreateInfo {
             cull_mode: vk::CullModeFlags::NONE,
@@ -187,9 +205,10 @@ impl CullingDebug {
             ..Default::default()
         };
 
-        let multisample_state_info = vk::PipelineMultisampleStateCreateInfo::builder()
-            .rasterization_samples(vk::SampleCountFlags::TYPE_1);
-
+        let multisample_state_info = vk::PipelineMultisampleStateCreateInfo {
+            rasterization_samples: vk::SampleCountFlags::TYPE_1,
+            ..Default::default()
+        };
         let noop_stencil_state = vk::StencilOpState {
             fail_op: vk::StencilOp::KEEP,
             pass_op: vk::StencilOp::KEEP,
@@ -217,35 +236,44 @@ impl CullingDebug {
             alpha_blend_op: vk::BlendOp::ADD,
             color_write_mask: vk::ColorComponentFlags::RGBA,
         }];
-        let color_blend_state = vk::PipelineColorBlendStateCreateInfo::builder()
-            .logic_op(vk::LogicOp::CLEAR)
-            .attachments(&color_blend_attachment_states);
+    
+         let color_blend_state = vk::PipelineColorBlendStateCreateInfo {
+            logic_op: vk::LogicOp::CLEAR,
+            attachment_count: color_blend_attachment_states.len() as u32,
+            p_attachments: color_blend_attachment_states.as_ptr(),
+            ..Default::default()
+        };
 
         let dynamic_state = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-        let dynamic_state_info =
-            vk::PipelineDynamicStateCreateInfo::builder().dynamic_states(&dynamic_state);
-
-        let graphic_pipeline_infos = vk::GraphicsPipelineCreateInfo::builder()
-            .stages(&shader_stage_create_infos)
-            .vertex_input_state(&vertex_input_state_info)
-            .input_assembly_state(&vertex_input_assembly_state_info)
-            .viewport_state(&viewport_state_info)
-            .rasterization_state(&rasterization_info)
-            .multisample_state(&multisample_state_info)
-            .depth_stencil_state(&depth_state_info)
-            .color_blend_state(&color_blend_state)
-            .dynamic_state(&dynamic_state_info)
-            .layout(pipeline_layout)
-            .render_pass(*render_pass);
-
+          let dynamic_state_info = vk::PipelineDynamicStateCreateInfo {
+            dynamic_state_count: dynamic_state.len() as u32,
+            p_dynamic_states: dynamic_state.as_ptr(),
+            ..Default::default()
+        };
+        let graphic_pipeline_infos = vk::GraphicsPipelineCreateInfo {
+            stage_count: shader_stage_create_infos.len() as u32,
+            p_stages: shader_stage_create_infos.as_ptr(),
+            p_vertex_input_state: &vertex_input_state_info,
+            p_input_assembly_state: &vertex_input_assembly_state_info,
+            p_viewport_state: &viewport_state_info,
+            p_rasterization_state: &rasterization_info,
+            p_multisample_state: &multisample_state_info,
+            p_depth_stencil_state: &depth_state_info,
+            p_color_blend_state: &color_blend_state,
+            p_dynamic_state: &dynamic_state_info,
+            layout: pipeline_layout,
+            render_pass: *render_pass,
+            ..Default::default()
+        };
+  
         let graphics_pipelines = unsafe {
-            device.create_graphics_pipelines(
-                vk::PipelineCache::null(),
-                &[graphic_pipeline_infos.build()],
-                None,
-            )
-        }
-        .unwrap();
+                    device.create_graphics_pipelines(
+                        vk::PipelineCache::null(),
+                        &[graphic_pipeline_infos],
+                        None,
+                    )
+                }
+                .unwrap();
 
         let graphic_pipeline = graphics_pipelines[0];
 

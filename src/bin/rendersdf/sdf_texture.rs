@@ -144,21 +144,22 @@ impl SdfTexture {
 
         let image_copys: Vec<vk::BufferImageCopy> = (0..sdf_levels.len())
             .map(|i| {
-                let buffer_image_copy_regions = vk::BufferImageCopy::builder()
-                    .buffer_offset(std::mem::size_of::<u16>() as u64 * sdf_levels[i].offset as u64)
-                    .image_subresource(
-                        vk::ImageSubresourceLayers::builder()
-                            .aspect_mask(vk::ImageAspectFlags::COLOR)
-                            .mip_level(i as u32)
-                            .layer_count(1)
-                            .build(),
-                    )
-                    .image_extent(vk::Extent3D {
+                let buffer_image_copy_regions = vk::BufferImageCopy {
+                    buffer_offset: std::mem::size_of::<u16>() as u64 * sdf_levels[i].offset as u64,
+                    image_subresource: vk::ImageSubresourceLayers {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        mip_level: i as u32,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    },
+                    image_extent: vk::Extent3D {
                         width: sdf_levels[i].sdf.header.dim.0,
                         height: sdf_levels[i].sdf.header.dim.1,
                         depth: sdf_levels[i].sdf.header.dim.2,
-                    });
-                buffer_image_copy_regions.build()
+                    },
+                    ..Default::default()
+                };
+                buffer_image_copy_regions
             })
             .collect();
 

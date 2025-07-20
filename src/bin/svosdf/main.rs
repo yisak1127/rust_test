@@ -22,7 +22,7 @@ fn parse_args(args: &[String]) -> Result<Params, &str> {
 
     let file_in = args[1].clone();
     let file_out = args[2].clone();
-    
+
     let mut brick_size = 8;
     let mut max_depth = 8;
     let mut threshold = 0.01;
@@ -60,10 +60,10 @@ fn parse_args(args: &[String]) -> Result<Params, &str> {
 
     Ok(Params {
         file_in,
-        file_out,
-        brick_size,
-        max_depth,
-        threshold,
+       file_out,
+       brick_size,
+       max_depth,
+       threshold,
     })
 }
 

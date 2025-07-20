@@ -24,9 +24,8 @@ use std::time::Instant;
 use ash::vk;
 
 use winit::{
-    event::{ElementState, Event, MouseButton, MouseScrollDelta, VirtualKeyCode, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    platform::run_return::EventLoopExtRunReturn,
+    event::{ElementState, Event, MouseButton, MouseScrollDelta, WindowEvent},
+    event_loop::EventLoop,
     window::WindowBuilder,
 };
 
@@ -92,14 +91,14 @@ fn main() {
     let window_width = 1920;
     let window_height = 1080;
 
-    let mut events_loop = EventLoop::new();
+    let event_loop = EventLoop::new().unwrap();
     let window = WindowBuilder::new()
         .with_title("Vulkan Test")
         .with_inner_size(winit::dpi::PhysicalSize::new(
             f64::from(window_width),
             f64::from(window_height),
         ))
-        .build(&events_loop)
+        .build(&event_loop)
         .unwrap();
 
     // Vulkan base initialization
@@ -141,16 +140,23 @@ fn main() {
         ..Default::default()
     }];
 
-    let subpasses = [vk::SubpassDescription::builder()
-        .color_attachments(&color_attachment_refs)
-        .depth_stencil_attachment(&depth_attachment_ref)
-        .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
-        .build()];
+    let subpasses = [vk::SubpassDescription {
+        pipeline_bind_point: vk::PipelineBindPoint::GRAPHICS,
+        color_attachment_count: color_attachment_refs.len() as u32,
+        p_color_attachments: color_attachment_refs.as_ptr(),
+        p_depth_stencil_attachment: &depth_attachment_ref,
+        ..Default::default()
+    }];
 
-    let render_pass_create_info = vk::RenderPassCreateInfo::builder()
-        .attachments(&render_pass_attachments)
-        .subpasses(&subpasses)
-        .dependencies(&dependencies);
+    let render_pass_create_info = vk::RenderPassCreateInfo {
+        attachment_count: render_pass_attachments.len() as u32,
+        p_attachments: render_pass_attachments.as_ptr(),
+        subpass_count: subpasses.len() as u32,
+        p_subpasses: subpasses.as_ptr(),
+        dependency_count: dependencies.len() as u32,
+        p_dependencies: dependencies.as_ptr(),
+        ..Default::default()
+    };
 
     let render_pass = unsafe {
         base.device
@@ -163,13 +169,15 @@ fn main() {
         .iter()
         .map(|&present_image_view| {
             let framebuffer_attachments = [present_image_view, base.depth_image_view];
-            let frame_buffer_create_info = vk::FramebufferCreateInfo::builder()
-                .render_pass(render_pass)
-                .attachments(&framebuffer_attachments)
-                .width(base.surface_resolution.width)
-                .height(base.surface_resolution.height)
-                .layers(1);
-
+            let frame_buffer_create_info = vk::FramebufferCreateInfo {
+                render_pass,
+                attachment_count: framebuffer_attachments.len() as u32,
+                p_attachments: framebuffer_attachments.as_ptr(),
+                width: base.surface_resolution.width,
+                height: base.surface_resolution.height,
+                layers: 1,
+                ..Default::default()
+            };
             unsafe {
                 base.device
                     .create_framebuffer(&frame_buffer_create_info, None)
@@ -213,9 +221,12 @@ fn main() {
             descriptor_count: NUM_DESCRIPTORS_PER_TYPE,
         },
     ];
-    let descriptor_pool_info = vk::DescriptorPoolCreateInfo::builder()
-        .pool_sizes(&descriptor_sizes)
-        .max_sets(NUM_DESCRIPTOR_SETS);
+    let descriptor_pool_info = vk::DescriptorPoolCreateInfo {
+        pool_size_count: descriptor_sizes.len() as u32,
+        p_pool_sizes: descriptor_sizes.as_ptr(),
+        max_sets: NUM_DESCRIPTOR_SETS,
+        ..Default::default()
+    };
 
     let descriptor_pool = unsafe {
         base.device
@@ -344,15 +355,14 @@ fn main() {
     let mut frame = 0u32;
     let mut active_command_buffer = 0;
 
-    events_loop.run_return(|event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
-
+    let _ = event_loop.run(|event, event_loop_window_target| {
+        event_loop_window_target.set_control_flow(winit::event_loop::ControlFlow::Poll);
         match event {
             Event::NewEvents(_) => {
                 inputs.wheel_delta = 0.0;
             }
 
-            Event::MainEventsCleared => {
+            Event::AboutToWait => {
                 let cursor_delta = (
                     inputs.cursor_position.0 - inputs_prev.cursor_position.0,
                     inputs.cursor_position.1 - inputs_prev.cursor_position.1,
@@ -480,14 +490,17 @@ fn main() {
                     },
                 ];
 
-                let render_pass_begin_info = vk::RenderPassBeginInfo::builder()
-                    .render_pass(render_pass)
-                    .framebuffer(framebuffers[present_index as usize])
-                    .render_area(vk::Rect2D {
+                let render_pass_begin_info = vk::RenderPassBeginInfo {
+                    render_pass,
+                    framebuffer: framebuffers[present_index as usize],
+                    render_area: vk::Rect2D {
                         offset: vk::Offset2D { x: 0, y: 0 },
                         extent: base.surface_resolution,
-                    })
-                    .clear_values(&clear_values);
+                    },
+                    clear_value_count: clear_values.len() as u32,
+                    p_clear_values: clear_values.as_ptr(),
+                    ..Default::default()
+                };
 
                 // Submit main command buffer
                 active_command_buffer = base.record_submit_commandbuffer(
@@ -573,54 +586,57 @@ fn main() {
             }
 
             Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                WindowEvent::CloseRequested => event_loop_window_target.exit(),
 
                 // TODO: Handle swapchain resize
-                WindowEvent::Resized { .. } => {}
+                WindowEvent::Resized(_size) => {}
 
                 // Keyboard
-                WindowEvent::KeyboardInput { input, .. } => {
-                    let pressed = input.state == ElementState::Pressed;
-
-                    if input.virtual_keycode == Some(VirtualKeyCode::W) {
-                        inputs.keyboard_forward = if pressed { 1 } else { 0 };
-                    }
-
-                    if input.virtual_keycode == Some(VirtualKeyCode::S) {
-                        inputs.keyboard_forward = if pressed { -1 } else { 0 };
-                    }
-
-                    if input.virtual_keycode == Some(VirtualKeyCode::D) {
-                        inputs.keyboard_side = if pressed { 1 } else { 0 };
-                    }
-
-                    if input.virtual_keycode == Some(VirtualKeyCode::A) {
-                        inputs.keyboard_side = if pressed { -1 } else { 0 };
+                WindowEvent::KeyboardInput { event, .. } => {
+                    let pressed = event.state == ElementState::Pressed;
+                    use winit::keyboard::Key;
+                    match &event.logical_key {
+                        Key::Character(c) if c.as_str() == "w" || c.as_str() == "W" => {
+                            inputs.keyboard_forward = if pressed { 1 } else { 0 };
+                        }
+                        Key::Character(c) if c.as_str() == "s" || c.as_str() == "S" => {
+                            inputs.keyboard_forward = if pressed { -1 } else { 0 };
+                        }
+                        Key::Character(c) if c.as_str() == "d" || c.as_str() == "D" => {
+                            inputs.keyboard_side = if pressed { 1 } else { 0 };
+                        }
+                        Key::Character(c) if c.as_str() == "a" || c.as_str() == "A" => {
+                            inputs.keyboard_side = if pressed { -1 } else { 0 };
+                        }
+                        _ => {}
                     }
                 }
 
                 // Mouse
-                WindowEvent::MouseInput {
-                    button: MouseButton::Left,
-                    state,
-                    ..
-                } => {
-                    inputs.is_left_clicked = state == ElementState::Pressed;
+                WindowEvent::MouseInput { button, state, .. } => {
+                    if button == MouseButton::Left {
+                        inputs.is_left_clicked = state == ElementState::Pressed;
+                    }
                 }
                 WindowEvent::CursorMoved { position, .. } => {
-                    let position: (i32, i32) = position.into();
-                    inputs.cursor_position = position;
+                    let x = position.x.round() as i32;
+                    let y = position.y.round() as i32;
+                    inputs.cursor_position = (x, y);
                 }
-                WindowEvent::MouseWheel {
-                    delta: MouseScrollDelta::LineDelta(_, v_lines),
-                    ..
-                } => {
-                    inputs.wheel_delta += v_lines;
+                WindowEvent::MouseWheel { delta, .. } => {
+                    match delta {
+                        MouseScrollDelta::LineDelta(_, v_lines) => {
+                            inputs.wheel_delta += v_lines;
+                        }
+                        MouseScrollDelta::PixelDelta(pos) => {
+                            inputs.wheel_delta += pos.y as f32 / 10.0;
+                        }
+                    }
                 }
                 _ => (),
             },
 
-            Event::LoopDestroyed => unsafe { base.device.device_wait_idle() }.unwrap(),
+            Event::LoopExiting => unsafe { base.device.device_wait_idle() }.unwrap(),
             _ => (),
         }
     });

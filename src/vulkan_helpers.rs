@@ -33,6 +33,7 @@ impl VkBuffer {
                 requirements,
                 location,
                 linear: true,
+                allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             })
             .unwrap();
 
@@ -96,6 +97,7 @@ impl VkImage {
             requirements,
             location,
             linear: false,
+            allocation_scheme: AllocationScheme::GpuAllocatorManaged,
         });
 
         // Workaround for gpu_allocator DEVICE_LOCAL memory running out on iGPUs
@@ -106,6 +108,7 @@ impl VkImage {
                 requirements,
                 location: MemoryLocation::CpuToGpu,
                 linear: false,
+                allocation_scheme: AllocationScheme::GpuAllocatorManaged,
             });
         };
 

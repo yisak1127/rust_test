@@ -2,7 +2,7 @@ use crate::sdf::*;
 use crate::serialization::*;
 use std::io;
 
-const LEVEL_ZERO: u16 = 65536 / 2;
+const LEVEL_ZERO: u16 = 32768;
 
 #[derive(Clone, Debug)]
 pub struct OctreeNode {
@@ -173,29 +173,38 @@ impl SvoSdf {
             brick_size,
         };
 
-        svo_sdf.build_octree(sdf, &mut svo_sdf.root, 0, max_depth, threshold);
+        SvoSdf::build_octree(
+            sdf,
+            &mut svo_sdf.root,
+            &mut svo_sdf.bricks,
+            svo_sdf.brick_size,
+            0,
+            max_depth,
+            threshold,
+        );
         svo_sdf
     }
 
     fn build_octree(
-        &mut self,
         sdf: &Sdf,
         node: &mut OctreeNode,
+        bricks: &mut Vec<Brick>,
+        brick_size: u32,
         depth: u32,
         max_depth: u32,
         threshold: f32,
     ) {
         let bounds_size = node.bounds.size();
-        let min_size = self.brick_size;
+        let min_size = brick_size;
 
         // If we've reached maximum depth or the node is small enough, create a leaf
         if depth >= max_depth || (bounds_size.0 <= min_size && bounds_size.1 <= min_size && bounds_size.2 <= min_size) {
-            let brick = Brick::extract_from_sdf(sdf, node.bounds.min, self.brick_size.min(bounds_size.0.max(bounds_size.1.max(bounds_size.2))));
+            let brick = Brick::extract_from_sdf(sdf, node.bounds.min, brick_size.min(bounds_size.0.max(bounds_size.1.max(bounds_size.2))));
             
             // Only store the brick if it contains surface data or is not uniform
             if brick.has_surface(threshold) || !brick.is_uniform(threshold) {
-                node.brick_index = Some(self.bricks.len() as u32);
-                self.bricks.push(brick);
+                node.brick_index = Some(bricks.len() as u32);
+                bricks.push(brick);
             }
             node.is_leaf = true;
             return;
@@ -213,7 +222,15 @@ impl SvoSdf {
             let child_bounds = node.bounds.child_bounds(i);
             let mut child_node = OctreeNode::new(child_bounds);
             
-            self.build_octree(sdf, &mut child_node, depth + 1, max_depth, threshold);
+            SvoSdf::build_octree(
+                sdf,
+                &mut child_node,
+                bricks,
+                brick_size,
+                depth + 1,
+                max_depth,
+                threshold,
+            );
             
             if !child_node.is_empty() {
                 node.children[i] = Some(Box::new(child_node));

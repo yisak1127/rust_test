@@ -292,18 +292,23 @@ impl DepthPyramid {
                 ..Default::default()
             },
         ];
-        let descriptor_info =
-            vk::DescriptorSetLayoutCreateInfo::builder().bindings(&desc_layout_bindings);
-
+        let descriptor_info = vk::DescriptorSetLayoutCreateInfo {
+            binding_count: desc_layout_bindings.len() as u32,
+            p_bindings: desc_layout_bindings.as_ptr(),
+            ..Default::default()
+        };
         let desc_set_layout =
             unsafe { device.create_descriptor_set_layout(&descriptor_info, None) }.unwrap();
 
         let desc_set_layouts = &[desc_set_layout];
 
         let descriptor_sets = {
-            let desc_alloc_info = vk::DescriptorSetAllocateInfo::builder()
-                .descriptor_pool(*descriptor_pool)
-                .set_layouts(desc_set_layouts);
+            let desc_alloc_info = vk::DescriptorSetAllocateInfo {
+                descriptor_pool: *descriptor_pool,
+                descriptor_set_count: 1,
+                p_set_layouts: desc_set_layouts.as_ptr(),
+                ..Default::default()
+            };
 
             unsafe { device.allocate_descriptor_sets(&desc_alloc_info) }.unwrap()
         };
@@ -362,9 +367,11 @@ impl DepthPyramid {
             size: std::mem::size_of::<DepthPyramidUniforms>() as u32,
         }];
 
-        let layout_create_info = vk::PipelineLayoutCreateInfo::builder()
-            .set_layouts(desc_set_layouts)
-            .push_constant_ranges(&push_constants);
+        let layout_create_info = vk::PipelineLayoutCreateInfo {
+            set_layout_count: desc_set_layouts.len() as u32,
+            p_set_layouts: desc_set_layouts.as_ptr(),
+            ..Default::default()
+        };
 
         let pipeline_layout =
             unsafe { device.create_pipeline_layout(&layout_create_info, None) }.unwrap();
@@ -375,8 +382,11 @@ impl DepthPyramid {
             ));
             let comp_code =
                 read_spv(&mut comp_spv_file).expect("Failed to read compute shader spv file");
-            let comp_shader_info = vk::ShaderModuleCreateInfo::builder().code(&comp_code);
-
+            let comp_shader_info = vk::ShaderModuleCreateInfo {
+                code_size: comp_code.len() * 4,
+                p_code: comp_code.as_ptr(),
+                ..Default::default()
+            };
             unsafe { device.create_shader_module(&comp_shader_info, None) }
                 .expect("Fragment shader module error")
         };
@@ -403,8 +413,11 @@ impl DepthPyramid {
             ));
             let comp_code =
                 read_spv(&mut comp_spv_file).expect("Failed to read compute shader spv file");
-            let comp_shader_info = vk::ShaderModuleCreateInfo::builder().code(&comp_code);
-
+            let comp_shader_info = vk::ShaderModuleCreateInfo {
+                code_size: comp_code.len() * 4,
+                p_code: comp_code.as_ptr(),
+                ..Default::default()
+            };
             unsafe { device.create_shader_module(&comp_shader_info, None) }
                 .expect("Fragment shader module error")
         };

@@ -250,27 +250,29 @@ impl SvoTexture {
             let brick_y = ((i as u32) / bricks_per_row) % bricks_per_row;
             let brick_z = (i as u32) / (bricks_per_row * bricks_per_row);
 
-            let copy_region = vk::BufferImageCopy::builder()
-                .buffer_offset(buffer_offset)
-                .image_subresource(
-                    vk::ImageSubresourceLayers::builder()
-                        .aspect_mask(vk::ImageAspectFlags::COLOR)
-                        .mip_level(0)
-                        .layer_count(1)
-                        .build(),
-                )
-                .image_offset(vk::Offset3D {
+            let copy_region = vk::BufferImageCopy {
+                buffer_offset,
+                buffer_row_length: 0,
+                buffer_image_height: 0,
+                image_subresource: vk::ImageSubresourceLayers {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    mip_level: 0,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                },
+                image_offset: vk::Offset3D {
                     x: (brick_x * max_brick_size) as i32,
                     y: (brick_y * max_brick_size) as i32,
                     z: (brick_z * max_brick_size) as i32,
-                })
-                .image_extent(vk::Extent3D {
+                },
+                image_extent: vk::Extent3D {
                     width: brick.size,
                     height: brick.size,
                     depth: brick.size,
-                });
+                },
+            };
 
-            image_copys.push(copy_region.build());
+            image_copys.push(copy_region);
             buffer_offset += (brick.data.len() * std::mem::size_of::<u16>()) as u64;
         }
 

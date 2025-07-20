@@ -169,18 +169,27 @@ impl Culling {
                 ..Default::default()
             },
         ];
-        let descriptor_info =
-            vk::DescriptorSetLayoutCreateInfo::builder().bindings(&desc_layout_bindings);
-
+        
+        let descriptor_info = vk::DescriptorSetLayoutCreateInfo {
+            binding_count: desc_layout_bindings.len() as u32,
+            p_bindings: desc_layout_bindings.as_ptr(),
+            ..Default::default()
+        };
+        
         let desc_set_layout =
             unsafe { device.create_descriptor_set_layout(&descriptor_info, None) }.unwrap();
 
         let desc_set_layouts = &[desc_set_layout];
 
         let descriptor_sets = {
-            let desc_alloc_info = vk::DescriptorSetAllocateInfo::builder()
-                .descriptor_pool(*descriptor_pool)
-                .set_layouts(desc_set_layouts);
+            let desc_alloc_info = vk::DescriptorSetAllocateInfo {
+                s_type: vk::StructureType::DESCRIPTOR_SET_ALLOCATE_INFO,
+                p_next: std::ptr::null(),
+                descriptor_pool: *descriptor_pool,
+                descriptor_set_count: desc_set_layouts.len() as u32,
+                p_set_layouts: desc_set_layouts.as_ptr(),
+                ..Default::default()
+            };
 
             unsafe { device.allocate_descriptor_sets(&desc_alloc_info) }.unwrap()
         };
@@ -242,9 +251,12 @@ impl Culling {
             },
         ];
         unsafe { device.update_descriptor_sets(&write_desc_sets, &[]) };
-
-        let layout_create_info =
-            vk::PipelineLayoutCreateInfo::builder().set_layouts(desc_set_layouts);
+        
+        let layout_create_info = vk::PipelineLayoutCreateInfo {
+                    set_layout_count: desc_set_layouts.len() as u32,
+                    p_set_layouts: desc_set_layouts.as_ptr(),
+                    ..Default::default()
+                };
 
         let pipeline_layout =
             unsafe { device.create_pipeline_layout(&layout_create_info, None) }.unwrap();
@@ -253,8 +265,13 @@ impl Culling {
             let mut comp_spv_file = Cursor::new(&include_bytes!("../../../shader/culling.spv"));
             let comp_code =
                 read_spv(&mut comp_spv_file).expect("Failed to read compute shader spv file");
-            let comp_shader_info = vk::ShaderModuleCreateInfo::builder().code(&comp_code);
-
+            let comp_shader_info = vk::ShaderModuleCreateInfo {
+                p_next: std::ptr::null(),
+                flags: vk::ShaderModuleCreateFlags::empty(),
+                code_size: comp_code.len() * 4,
+                p_code: comp_code.as_ptr(),
+                ..Default::default()
+            };
             unsafe { device.create_shader_module(&comp_shader_info, None) }
                 .expect("Fragment shader module error")
         };

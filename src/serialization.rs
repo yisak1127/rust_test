@@ -9,6 +9,12 @@ impl Loader {
         Loader { offset: 0 }
     }
 
+    pub fn load_u8(&mut self, bytes: &[u8]) -> u8 {
+        let out = bytes[self.offset];
+        self.offset += 1;
+        out
+    }
+
     pub fn load_u16(&mut self, bytes: &[u8]) -> u16 {
         let out = u16::from_le_bytes(bytes[self.offset..self.offset + 2].try_into().unwrap());
         self.offset += 2;

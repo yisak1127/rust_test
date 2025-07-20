@@ -10,20 +10,20 @@ use crate::vulkan_helpers::*;
 use gpu_allocator::vulkan::*;
 use gpu_allocator::MemoryLocation;
 
-use ash::extensions::{
-    ext::DebugUtils,
-    khr::{Surface, Swapchain},
-};
-
+use ash::vk;
 use winit::window::Window;
+use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-use ash::{vk, Entry};
+use ash::{Entry};
 pub use ash::{Device, Instance};
 use std::borrow::Cow;
 use std::default::Default;
 use std::ffi::{CStr, CString};
 use std::mem::ManuallyDrop;
 use std::ops::Drop;
+use ash::khr::surface::Instance as Surface;
+use ash::khr::swapchain::Device as Swapchain;
+use ash::ext::debug_utils::Instance as DebugUtils;
 
 const NUM_COMMAND_BUFFERS: u32 = 3;
 
@@ -77,22 +77,29 @@ impl CommandBufferPool {
         num_command_buffers: u32,
     ) -> CommandBufferPool {
         unsafe {
-            let pool_create_info = vk::CommandPoolCreateInfo::builder()
-                .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
-                .queue_family_index(queue_family_index);
+            let pool_create_info = vk::CommandPoolCreateInfo {
+                flags: vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER,
+                queue_family_index,
+                ..Default::default()
+            };
 
             let pool = device.create_command_pool(&pool_create_info, None).unwrap();
 
-            let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::builder()
-                .command_buffer_count(num_command_buffers)
-                .command_pool(pool)
-                .level(vk::CommandBufferLevel::PRIMARY);
+            let command_buffer_allocate_info = vk::CommandBufferAllocateInfo {
+                command_buffer_count: num_command_buffers,
+                command_pool: pool,
+                level: vk::CommandBufferLevel::PRIMARY,
+                ..Default::default()
+            };
 
             let command_buffers = device
                 .allocate_command_buffers(&command_buffer_allocate_info)
                 .unwrap();
 
-            let fence_info = vk::FenceCreateInfo::builder().flags(vk::FenceCreateFlags::SIGNALED);
+            let fence_info = vk::FenceCreateInfo {
+                flags: vk::FenceCreateFlags::SIGNALED,
+                ..Default::default()
+            };
 
             let command_buffers: Vec<CommandBuffer> = command_buffers
                 .iter()
@@ -167,55 +174,65 @@ impl VulkanBase {
                 .map(|raw_name| raw_name.as_ptr())
                 .collect();
 
-            //let extension_names_raw = ash_window::enumerate_required_extensions(window).unwrap().to_vec();
-
-            let surface_extensions = ash_window::enumerate_required_extensions(window).unwrap();
-            let mut extension_names_raw = surface_extensions
-                .iter()
-                .map(|ext| ext.as_ptr())
-                .collect::<Vec<_>>();
-
-            extension_names_raw.push(DebugUtils::name().as_ptr());
+            let display_handle = window.display_handle().unwrap();
+            let window_handle = window.window_handle().unwrap();
+            let raw_display_handle = display_handle.as_raw();
+            let raw_window_handle = window_handle.as_raw();
+            let mut extension_names_raw: Vec<*const i8> = ash_window::enumerate_required_extensions(raw_display_handle)
+                .unwrap()
+                .to_vec();
+            extension_names_raw.push(ash::ext::debug_utils::NAME.as_ptr());
             extension_names_raw.push(
                 ::std::ffi::CStr::from_bytes_with_nul(b"VK_KHR_get_physical_device_properties2\0")
                     .expect("Wrong extension string")
                     .as_ptr(),
             );
 
-            let appinfo = vk::ApplicationInfo::builder()
-                .application_name(&app_name)
-                .application_version(0)
-                .engine_name(&app_name)
-                .engine_version(0)
-                .api_version(vk::make_api_version(0, 1, 0, 0));
+            let appinfo = vk::ApplicationInfo {
+                p_application_name: app_name.as_ptr(),
+                application_version: 0,
+                p_engine_name: app_name.as_ptr(),
+                engine_version: 0,
+                api_version: vk::make_api_version(0, 1, 0, 0),
+                ..Default::default()
+            };
 
-            let create_info = vk::InstanceCreateInfo::builder()
-                .application_info(&appinfo)
-                .enabled_layer_names(&layers_names_raw)
-                .enabled_extension_names(&extension_names_raw);
+            let create_info = vk::InstanceCreateInfo {
+                p_application_info: &appinfo,
+                pp_enabled_layer_names: layers_names_raw.as_ptr(),
+                pp_enabled_extension_names: extension_names_raw.as_ptr(),
+                enabled_layer_count: layers_names_raw.len() as u32,
+                enabled_extension_count: extension_names_raw.len() as u32,
+                ..Default::default()
+            };
 
             let instance: Instance = entry
                 .create_instance(&create_info, None)
                 .expect("Instance creation error");
 
-            let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
-                .message_severity(
-                    vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
-                        | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING,
-                    //| vk::DebugUtilsMessageSeverityFlagsEXT::INFO,
-                )
-                .message_type(
-                    vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-                        | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
-                        | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
-                )
-                .pfn_user_callback(Some(vulkan_debug_callback));
+            let debug_info = vk::DebugUtilsMessengerCreateInfoEXT {
+                message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
+                    | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING,
+                message_type: vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                    | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
+                    | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
+                pfn_user_callback: Some(vulkan_debug_callback),
+                ..Default::default()
+            };
 
             let debug_utils_loader = DebugUtils::new(&entry, &instance);
             let debug_call_back = debug_utils_loader
                 .create_debug_utils_messenger(&debug_info, None)
                 .unwrap();
-            let surface = ash_window::create_surface(&entry, &instance, window, None).unwrap();
+            let surface = {
+                ash_window::create_surface(
+                    &entry,
+                    &instance,
+                    raw_display_handle,
+                    raw_window_handle,
+                    None,
+                ).unwrap()
+            };
             let pdevices = instance
                 .enumerate_physical_devices()
                 .expect("Physical device error");
@@ -251,11 +268,11 @@ impl VulkanBase {
             let queue_family_index = queue_family_index as u32;
 
             let device_extension_names = [
-                Swapchain::name(), /*, &CString::new("VK_NV_mesh_shader").unwrap()*/
+                ash::khr::swapchain::NAME, /*, &CString::new("VK_NV_mesh_shader").unwrap()*/
             ];
             let device_extension_names_raw: Vec<*const i8> = device_extension_names
                 .iter()
-                .map(|raw_name| raw_name.as_ptr())
+                .map(|cstr| cstr.as_ptr())
                 .collect();
 
             let features = vk::PhysicalDeviceFeatures {
@@ -268,16 +285,21 @@ impl VulkanBase {
 
             let priorities = [1.0];
 
-            let queue_info = [vk::DeviceQueueCreateInfo::builder()
-                .queue_family_index(queue_family_index)
-                .queue_priorities(&priorities)
-                .build()];
+            let queue_info = [vk::DeviceQueueCreateInfo {
+                queue_family_index,
+                p_queue_priorities: priorities.as_ptr(),
+                queue_count: priorities.len() as u32,
+                ..Default::default()
+            }];
 
-            let device_create_info = vk::DeviceCreateInfo::builder()
-                //.push_next(&mut mesh_shader)
-                .queue_create_infos(&queue_info)
-                .enabled_extension_names(&device_extension_names_raw)
-                .enabled_features(&features);
+            let device_create_info = vk::DeviceCreateInfo {
+                p_queue_create_infos: queue_info.as_ptr(),
+                queue_create_info_count: queue_info.len() as u32,
+                pp_enabled_extension_names: device_extension_names_raw.as_ptr(),
+                enabled_extension_count: device_extension_names_raw.len() as u32,
+                p_enabled_features: &features,
+                ..Default::default()
+            };
 
             let device: Device = instance
                 .create_device(pdevice, &device_create_info, None)
@@ -334,19 +356,21 @@ impl VulkanBase {
                 .unwrap_or(vk::PresentModeKHR::FIFO);
             let swapchain_loader = Swapchain::new(&instance, &device);
 
-            let swapchain_create_info = vk::SwapchainCreateInfoKHR::builder()
-                .surface(surface)
-                .min_image_count(desired_image_count)
-                .image_color_space(surface_format.color_space)
-                .image_format(surface_format.format)
-                .image_extent(surface_resolution)
-                .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
-                .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
-                .pre_transform(pre_transform)
-                .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
-                .present_mode(present_mode)
-                .clipped(true)
-                .image_array_layers(1);
+            let swapchain_create_info = vk::SwapchainCreateInfoKHR {
+                surface: surface,
+                min_image_count: desired_image_count,
+                image_color_space: surface_format.color_space,
+                image_format: surface_format.format,
+                image_extent: surface_resolution,
+                image_usage: vk::ImageUsageFlags::COLOR_ATTACHMENT,
+                image_sharing_mode: vk::SharingMode::EXCLUSIVE,
+                pre_transform: pre_transform,
+                composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+                present_mode: present_mode,
+                clipped: vk::TRUE,
+                image_array_layers: 1,
+                ..Default::default()
+            };
 
             let swapchain = swapchain_loader
                 .create_swapchain(&swapchain_create_info, None)
@@ -356,23 +380,25 @@ impl VulkanBase {
             let present_image_views: Vec<vk::ImageView> = present_images
                 .iter()
                 .map(|&image| {
-                    let create_view_info = vk::ImageViewCreateInfo::builder()
-                        .view_type(vk::ImageViewType::TYPE_2D)
-                        .format(surface_format.format)
-                        .components(vk::ComponentMapping {
+                    let create_view_info = vk::ImageViewCreateInfo {
+                        view_type: vk::ImageViewType::TYPE_2D,
+                        format: surface_format.format,
+                        components: vk::ComponentMapping {
                             r: vk::ComponentSwizzle::R,
                             g: vk::ComponentSwizzle::G,
                             b: vk::ComponentSwizzle::B,
                             a: vk::ComponentSwizzle::A,
-                        })
-                        .subresource_range(vk::ImageSubresourceRange {
+                        },
+                        subresource_range: vk::ImageSubresourceRange {
                             aspect_mask: vk::ImageAspectFlags::COLOR,
                             base_mip_level: 0,
                             level_count: 1,
                             base_array_layer: 0,
                             layer_count: 1,
-                        })
-                        .image(image);
+                        },
+                        image: image,
+                        ..Default::default()
+                    };
                     device.create_image_view(&create_view_info, None).unwrap()
                 })
                 .collect();
@@ -383,23 +409,26 @@ impl VulkanBase {
                 physical_device: pdevice,
                 debug_settings: Default::default(),
                 buffer_device_address: false,
+                allocation_sizes: Default::default(),
             })
             .unwrap();
 
-            let depth_image_create_info = vk::ImageCreateInfo::builder()
-                .image_type(vk::ImageType::TYPE_2D)
-                .format(vk::Format::D32_SFLOAT)
-                .extent(vk::Extent3D {
+            let depth_image_create_info = vk::ImageCreateInfo {
+                image_type: vk::ImageType::TYPE_2D,
+                format: vk::Format::D32_SFLOAT,
+                extent: vk::Extent3D {
                     width: surface_resolution.width,
                     height: surface_resolution.height,
                     depth: 1,
-                })
-                .mip_levels(1)
-                .array_layers(1)
-                .samples(vk::SampleCountFlags::TYPE_1)
-                .tiling(vk::ImageTiling::OPTIMAL)
-                .usage(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED)
-                .sharing_mode(vk::SharingMode::EXCLUSIVE);
+                },
+                mip_levels: 1,
+                array_layers: 1,
+                samples: vk::SampleCountFlags::TYPE_1,
+                tiling: vk::ImageTiling::OPTIMAL,
+                usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT | vk::ImageUsageFlags::SAMPLED,
+                sharing_mode: vk::SharingMode::EXCLUSIVE,
+                ..Default::default()
+            };
 
             let depth_image = VkImage::new(
                 &device,
@@ -408,17 +437,18 @@ impl VulkanBase {
                 MemoryLocation::GpuOnly,
             );
 
-            let depth_image_view_info = vk::ImageViewCreateInfo::builder()
-                .subresource_range(
-                    vk::ImageSubresourceRange::builder()
-                        .aspect_mask(vk::ImageAspectFlags::DEPTH)
-                        .level_count(1)
-                        .layer_count(1)
-                        .build(),
-                )
-                .image(depth_image.image)
-                .format(depth_image_create_info.format)
-                .view_type(vk::ImageViewType::TYPE_2D);
+            let depth_image_view_info = vk::ImageViewCreateInfo {
+                subresource_range: vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::DEPTH,
+                    level_count: 1,
+                    layer_count: 1,
+                    ..Default::default()
+                },
+                image: depth_image.image,
+                format: depth_image_create_info.format,
+                view_type: vk::ImageViewType::TYPE_2D,
+                ..Default::default()
+            };
 
             let depth_image_view = device
                 .create_image_view(&depth_image_view_info, None)
@@ -468,21 +498,20 @@ impl VulkanBase {
                 &[],
                 &[],
                 |device, setup_command_buffer| {
-                    let layout_transition_barriers = vk::ImageMemoryBarrier::builder()
-                        .image(vk.depth_image.image)
-                        .dst_access_mask(
-                            vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
-                                | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-                        )
-                        .new_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-                        .old_layout(vk::ImageLayout::UNDEFINED)
-                        .subresource_range(
-                            vk::ImageSubresourceRange::builder()
-                                .aspect_mask(vk::ImageAspectFlags::DEPTH)
-                                .layer_count(1)
-                                .level_count(1)
-                                .build(),
-                        );
+                    let layout_transition_barriers = vk::ImageMemoryBarrier {
+                        image: vk.depth_image.image,
+                        dst_access_mask: vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
+                            | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                        new_layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                        old_layout: vk::ImageLayout::UNDEFINED,
+                        subresource_range: vk::ImageSubresourceRange {
+                            aspect_mask: vk::ImageAspectFlags::DEPTH,
+                            level_count: 1,
+                            layer_count: 1,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    };
 
                     device.cmd_pipeline_barrier(
                         setup_command_buffer,
@@ -491,7 +520,7 @@ impl VulkanBase {
                         vk::DependencyFlags::empty(),
                         &[],
                         &[],
-                        &[layout_transition_barriers.build()],
+                        &[layout_transition_barriers],
                     );
                 },
             );
@@ -530,8 +559,10 @@ impl VulkanBase {
                 )
                 .expect("Reset command buffer failed.");
 
-            let command_buffer_begin_info = vk::CommandBufferBeginInfo::builder()
-                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            let command_buffer_begin_info = vk::CommandBufferBeginInfo {
+                flags: vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT,
+                ..Default::default()
+            };
 
             self.device
                 .begin_command_buffer(command_buffer, &command_buffer_begin_info)
@@ -543,14 +574,19 @@ impl VulkanBase {
 
             let command_buffers = vec![command_buffer];
 
-            let submit_info = vk::SubmitInfo::builder()
-                .wait_semaphores(wait_semaphores)
-                .wait_dst_stage_mask(wait_mask)
-                .command_buffers(&command_buffers)
-                .signal_semaphores(signal_semaphores);
+            let submit_info = vk::SubmitInfo {
+                wait_semaphore_count: wait_semaphores.len() as u32,
+                p_wait_semaphores: wait_semaphores.as_ptr(),
+                p_wait_dst_stage_mask: wait_mask.as_ptr(),
+                command_buffer_count: command_buffers.len() as u32,
+                p_command_buffers: command_buffers.as_ptr(),
+                signal_semaphore_count: signal_semaphores.len() as u32,
+                p_signal_semaphores: signal_semaphores.as_ptr(),
+                ..Default::default()
+            };
 
             self.device
-                .queue_submit(submit_queue, &[submit_info.build()], submit_fence)
+                .queue_submit(submit_queue, &[submit_info], submit_fence)
                 .expect("queue submit failed.");
         }
 
