@@ -22,3 +22,7 @@ path = "src/bin/sdf2tilemap/main.rs"
 [[bin]]
 name = "svosdf"
 path = "src/bin/svosdf/main.rs"
+
+[[bin]]
+name = "rendersvosdf"
+path = "src/bin/rendersvosdf/main.rs"
