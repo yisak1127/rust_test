@@ -25,7 +25,7 @@ fn parse_args(args: &[String]) -> Result<Params, &str> {
 
     let mut brick_size = 8;
     let mut max_depth = 8;
-    let mut threshold = 0.01;
+    let mut threshold = 0.004;
 
     let mut i = 3;
     while i < args.len() {
@@ -48,7 +48,7 @@ fn parse_args(args: &[String]) -> Result<Params, &str> {
             }
             "-t" | "--threshold" => {
                 if i + 1 < args.len() {
-                    threshold = args[i + 1].parse().unwrap_or(0.01);
+                    threshold = args[i + 1].parse().unwrap_or(0.004);
                     i += 2;
                 } else {
                     return Err("Missing threshold value");
